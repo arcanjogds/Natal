@@ -16,7 +16,9 @@ mongoose.connect('mongodb+srv://guilhermearcanjodasilva_db_user:HtMkf8DjzmyRgcxz
 const Participant = mongoose.model('Participant', new mongoose.Schema({
     name: String,
     drawnName: String,
-    hasSeen: { type: Boolean, default: false }
+    hasSeen: { type: Boolean, default: false },
+    password: { type: String, default: '' },
+    passwordChanged: { type: Boolean, default: false }
 }));
 
 const Presente = mongoose.model('Presente', new mongoose.Schema({
@@ -75,15 +77,58 @@ app.post('/api/admin/shuffle', async (req, res) => {
 
     await Participant.deleteMany({});
 
-    const newParticipants = names.map((name, index) => ({
-        name: name,
-        drawnName: shuffled[index],
-        hasSeen: false
-    }));
+    const newParticipants = names.map((name, index) => {
+        // Gera senha numérica de 4 dígitos (1000 a 9999)
+        const gerada = Math.floor(1000 + Math.random() * 9000).toString();
+        return {
+            name: name,
+            drawnName: shuffled[index],
+            hasSeen: false,
+            password: gerada,
+            passwordChanged: false
+        };
+    });
 
     await Participant.insertMany(newParticipants);
 
     res.json({ success: true });
+});
+
+// ==========================================
+// ROTAS DE LOGIN E ADMIN
+// ==========================================
+
+app.post('/api/login', async (req, res) => {
+    const { name, password } = req.body;
+    const participant = await Participant.findOne({ name });
+    
+    if (!participant) return res.status(404).json({ error: 'Nome não encontrado' });
+    if (participant.password !== password) return res.status(401).json({ error: 'Senha incorreta' });
+    
+    res.json({ success: true, participant });
+});
+
+app.post('/api/change-password', async (req, res) => {
+    const { name, oldPassword, newPassword } = req.body;
+    const participant = await Participant.findOne({ name });
+    
+    if (!participant) return res.status(404).json({ error: 'Nome não encontrado' });
+    if (participant.password !== oldPassword) return res.status(401).json({ error: 'Senha atual incorreta' });
+    if (!newPassword || newPassword.length < 4) return res.status(400).json({ error: 'A nova senha deve ter no mínimo 4 caracteres' });
+    
+    participant.password = newPassword;
+    participant.passwordChanged = true;
+    await participant.save();
+    
+    res.json({ success: true });
+});
+
+app.post('/api/admin/participants', async (req, res) => {
+    const { password } = req.body;
+    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    
+    const participants = await Participant.find({}, 'name password passwordChanged');
+    res.json(participants);
 });
 
 // ==========================================
@@ -107,6 +152,19 @@ app.post('/api/presentes', async (req, res) => {
 // Deletar um presente (caso a pessoa desista do item)
 app.delete('/api/presentes/:id', async (req, res) => {
     await Presente.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+});
+
+// Deletar em massa (admin)
+app.post('/api/admin/presentes/delete', async (req, res) => {
+    const { password, ids, all } = req.body;
+    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    
+    if (all) {
+        await Presente.deleteMany({});
+    } else if (ids && ids.length > 0) {
+        await Presente.deleteMany({ _id: { $in: ids } });
+    }
     res.json({ success: true });
 });
 
@@ -164,6 +222,19 @@ app.put('/api/ceia/:id', async (req, res) => {
 // Deletar um prato do cardápio
 app.delete('/api/ceia/:id', async (req, res) => {
     await Prato.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+});
+
+// Deletar em massa (admin)
+app.post('/api/admin/ceia/delete', async (req, res) => {
+    const { password, ids, all } = req.body;
+    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    
+    if (all) {
+        await Prato.deleteMany({});
+    } else if (ids && ids.length > 0) {
+        await Prato.deleteMany({ _id: { $in: ids } });
+    }
     res.json({ success: true });
 });
 
