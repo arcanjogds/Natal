@@ -46,6 +46,7 @@ app.post('/api/reveal', async (req, res) => {
     const participant = await Participant.findOne({ name });
 
     if (!participant) return res.status(404).json({ error: 'Nome não encontrado' });
+    if (participant.hasSeen) return res.status(403).json({ error: 'Este participante já revelou o amigo secreto em outro aparelho.' });
 
     participant.hasSeen = true;
     await participant.save();
