@@ -21,7 +21,7 @@ app.get('/api/participants', async (req, res) => {
     res.json(participants);
 });
 
-// Rota para revelar e bloquear o nome
+// Rota para revelar
 app.post('/api/reveal', async (req, res) => {
     const { name } = req.body;
     const participant = await Participant.findOne({ name });
@@ -34,16 +34,39 @@ app.post('/api/reveal', async (req, res) => {
     res.json({ drawnName: participant.drawnName });
 });
 
-// NOVA ROTA: Rota para resetar um erro individual
-app.post('/api/reset-participant', async (req, res) => {
-    const { name } = req.body;
-    const participant = await Participant.findOne({ name });
+// ROTA ADMIN: Refazer todo o sorteio
+app.post('/api/admin/shuffle', async (req, res) => {
+    const { password, names } = req.body;
 
-    if (participant) {
-        participant.hasSeen = false; // Libera o nome novamente
-        await participant.save();
+    // Senha de segurança
+    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    if (!names || names.length < 3) return res.status(400).json({ error: 'Mínimo de 3 nomes' });
+
+    // Lógica do Sorteio
+    let shuffled = [...names].sort(() => Math.random() - 0.5);
+    let valid = false;
+    while (!valid) {
+        valid = true;
+        for (let i = 0; i < names.length; i++) {
+            if (names[i] === shuffled[i]) {
+                shuffled = [...names].sort(() => Math.random() - 0.5);
+                valid = false;
+                break;
+            }
+        }
     }
 
+    // Limpa o banco de dados antigo
+    await Participant.deleteMany({});
+
+    // Salva os novos nomes sorteados
+    const newParticipants = names.map((name, index) => ({
+        name: name,
+        drawnName: shuffled[index],
+        hasSeen: false
+    }));
+
+    await Participant.insertMany(newParticipants);
     res.json({ success: true });
 });
 
