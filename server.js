@@ -109,6 +109,17 @@ app.delete('/api/presentes/:id', async (req, res) => {
     res.json({ success: true });
 });
 
+// Editar um presente
+app.put('/api/presentes/:id', async (req, res) => {
+    const { item, tamanhoEspecificacao, linkLoja } = req.body;
+    const presenteAtualizado = await Presente.findByIdAndUpdate(
+        req.params.id,
+        { item, tamanhoEspecificacao, linkLoja },
+        { new: true }
+    );
+    res.json(presenteAtualizado);
+});
+
 // ==========================================
 // NOVAS ROTAS: CARDÁPIO DA CEIA
 // ==========================================
@@ -127,7 +138,7 @@ app.post('/api/ceia', async (req, res) => {
     res.json(novoPrato);
 });
 
-// Assumir a responsabilidade por um prato (Botão "Eu levo!")
+// Assumir a responsabilidade por um prato (Botão "Eu levo!") ou Desistir (responsavel vazio)
 app.put('/api/ceia/:id/assumir', async (req, res) => {
     const { responsavel } = req.body;
     const prato = await Prato.findByIdAndUpdate(
@@ -136,6 +147,23 @@ app.put('/api/ceia/:id/assumir', async (req, res) => {
         { new: true } // Retorna o documento atualizado
     );
     res.json(prato);
+});
+
+// Editar um prato do cardápio
+app.put('/api/ceia/:id', async (req, res) => {
+    const { nomePrato, categoria } = req.body;
+    const pratoAtualizado = await Prato.findByIdAndUpdate(
+        req.params.id,
+        { nomePrato, categoria },
+        { new: true }
+    );
+    res.json(pratoAtualizado);
+});
+
+// Deletar um prato do cardápio
+app.delete('/api/ceia/:id', async (req, res) => {
+    await Prato.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
 });
 
 // Iniciar o servidor
