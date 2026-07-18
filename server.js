@@ -25,6 +25,7 @@ const Participant = mongoose.model('Participant', new mongoose.Schema({
 const Presente = mongoose.model('Presente', new mongoose.Schema({
     nomeFamiliar: String,
     nomeKit: { type: String, default: 'Pedido Individual' },
+    isKit: { type: Boolean, default: true },
     meta: { type: Number, default: 150 },
     itens: [{
         item: String,
@@ -207,10 +208,11 @@ app.get('/api/presentes', async (req, res) => {
 
 // Adicionar um novo presente à lista (ou Kit vazio)
 app.post('/api/presentes', async (req, res) => {
-    const { nomeFamiliar, nomeKit, itens, meta } = req.body;
+    const { nomeFamiliar, nomeKit, itens, meta, isKit } = req.body;
     const novoPresente = new Presente({ 
         nomeFamiliar, 
         nomeKit: nomeKit || 'Pedido de Presente', 
+        isKit: isKit !== undefined ? isKit : true,
         itens: itens || [],
         meta: meta || 150
     });
