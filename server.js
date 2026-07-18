@@ -24,16 +24,20 @@ const Participant = mongoose.model('Participant', new mongoose.Schema({
 
 const Presente = mongoose.model('Presente', new mongoose.Schema({
     nomeFamiliar: String,
-    item: String,
-    valor: String,
-    tamanhoEspecificacao: String,
-    linkLoja: String
+    nomeKit: { type: String, default: 'Pedido Individual' },
+    meta: { type: Number, default: 150 },
+    itens: [{
+        item: String,
+        valor: Number,
+        tamanhoEspecificacao: String,
+        linkLoja: String
+    }]
 }));
 
 const Prato = mongoose.model('Prato', new mongoose.Schema({
     nomePrato: String,
     categoria: String,
-    responsavel: { type: String, default: '' }
+    responsaveis: { type: [{ nome: String, quantidade: Number }], default: [] }
 }));
 
 // ==========================================
@@ -201,10 +205,15 @@ app.get('/api/presentes', async (req, res) => {
     res.json(presentes);
 });
 
-// Adicionar um novo presente à lista
+// Adicionar um novo presente à lista (ou Kit vazio)
 app.post('/api/presentes', async (req, res) => {
-    const { nomeFamiliar, item, valor, tamanhoEspecificacao, linkLoja } = req.body;
-    const novoPresente = new Presente({ nomeFamiliar, item, valor, tamanhoEspecificacao, linkLoja });
+    const { nomeFamiliar, nomeKit, itens, meta } = req.body;
+    const novoPresente = new Presente({ 
+        nomeFamiliar, 
+        nomeKit: nomeKit || 'Pedido de Presente', 
+        itens: itens || [],
+        meta: meta || 150
+    });
     await novoPresente.save();
     res.json(novoPresente);
 });
@@ -228,12 +237,17 @@ app.post('/api/admin/presentes/delete', async (req, res) => {
     res.json({ success: true });
 });
 
-// Editar um presente
+// Editar um presente/kit
 app.put('/api/presentes/:id', async (req, res) => {
-    const { item, valor, tamanhoEspecificacao, linkLoja } = req.body;
+    const { nomeKit, itens, meta } = req.body;
+    const updateData = {};
+    if (nomeKit !== undefined) updateData.nomeKit = nomeKit;
+    if (itens !== undefined) updateData.itens = itens;
+    if (meta !== undefined) updateData.meta = meta;
+    
     const presenteAtualizado = await Presente.findByIdAndUpdate(
         req.params.id,
-        { item, valor, tamanhoEspecificacao, linkLoja },
+        updateData,
         { new: true }
     );
     res.json(presenteAtualizado);
@@ -257,12 +271,12 @@ app.post('/api/ceia', async (req, res) => {
     res.json(novoPrato);
 });
 
-// Assumir a responsabilidade por um prato (Botão "Eu levo!") ou Desistir (responsavel vazio)
+// Assumir a responsabilidade por um prato ou Desistir
 app.put('/api/ceia/:id/assumir', async (req, res) => {
-    const { responsavel } = req.body;
+    const { responsaveis } = req.body; // array completo
     const prato = await Prato.findByIdAndUpdate(
         req.params.id,
-        { responsavel: responsavel },
+        { responsaveis: responsaveis },
         { new: true } // Retorna o documento atualizado
     );
     res.json(prato);
