@@ -18,7 +18,8 @@ const Participant = mongoose.model('Participant', new mongoose.Schema({
     drawnName: String,
     hasSeen: { type: Boolean, default: false },
     password: { type: String, default: '' },
-    passwordChanged: { type: Boolean, default: false }
+    passwordChanged: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true }
 }));
 
 const Presente = mongoose.model('Presente', new mongoose.Schema({
@@ -40,7 +41,7 @@ const Prato = mongoose.model('Prato', new mongoose.Schema({
 // ==========================================
 
 app.get('/api/participants', async (req, res) => {
-    const participants = await Participant.find({}, 'name hasSeen');
+    const participants = await Participant.find({ isActive: true }, 'name hasSeen');
     res.json(participants);
 });
 
@@ -78,22 +79,38 @@ app.post('/api/admin/shuffle', async (req, res) => {
 
     const existingParticipants = await Participant.find({});
     
-    await Participant.deleteMany({});
+    // Marcar como inativo os que não estão na nova lista
+    for (const existing of existingParticipants) {
+        if (!names.includes(existing.name)) {
+            existing.isActive = false;
+            existing.drawnName = '';
+            existing.hasSeen = false;
+            await existing.save();
+        }
+    }
 
-    const newParticipants = names.map((name, index) => {
+    // Adicionar ou atualizar os participantes da nova lista
+    for (let i = 0; i < names.length; i++) {
+        const name = names[i];
         const existing = existingParticipants.find(p => p.name === name);
-        // Gera senha se for usuário novo
-        const gerada = Math.floor(1000 + Math.random() * 9000).toString();
-        return {
-            name: name,
-            drawnName: shuffled[index],
-            hasSeen: false,
-            password: existing ? existing.password : gerada,
-            passwordChanged: existing ? existing.passwordChanged : false
-        };
-    });
-
-    await Participant.insertMany(newParticipants);
+        
+        if (existing) {
+            existing.isActive = true;
+            existing.drawnName = shuffled[i];
+            existing.hasSeen = false;
+            await existing.save();
+        } else {
+            const gerada = Math.floor(1000 + Math.random() * 9000).toString();
+            await new Participant({
+                name: name,
+                drawnName: shuffled[i],
+                hasSeen: false,
+                password: gerada,
+                passwordChanged: false,
+                isActive: true
+            }).save();
+        }
+    }
 
     res.json({ success: true });
 });
@@ -131,7 +148,7 @@ app.post('/api/admin/participants', async (req, res) => {
     const { password } = req.body;
     if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
     
-    const participants = await Participant.find({}, 'name password passwordChanged');
+    const participants = await Participant.find({}, 'name password passwordChanged isActive');
     res.json(participants);
 });
 
