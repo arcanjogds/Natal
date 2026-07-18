@@ -1,14 +1,23 @@
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const helmet = require('helmet');
+const mongoSanitize = require('express-mongo-sanitize');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(helmet());
+app.use(mongoSanitize());
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PUT', 'DELETE']
+}));
+app.use(express.json({ limit: '10kb' }));
 
-// Conexão com o MongoDB
-mongoose.connect('mongodb+srv://guilhermearcanjodasilva_db_user:HtMkf8DjzmyRgcxz@cluster0.7scuvbi.mongodb.net/amigosecreto?appName=Cluster0');
-
+// Conexão Segura com o MongoDB
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log('Conectado ao MongoDB com segurança!'))
+    .catch((err) => console.error('Erro na conexão com o banco:', err.message));
 // ==========================================
 // SCHEMAS (Modelos de Dados)
 // ==========================================
@@ -64,7 +73,7 @@ app.post('/api/reveal', async (req, res) => {
 
 app.post('/api/admin/shuffle', async (req, res) => {
     const { password } = req.body;
-    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'Senha incorreta' });
 
     const activeParticipants = await Participant.find({ isActive: true });
     if (activeParticipants.length < 3) return res.status(400).json({ error: 'Mínimo de 3 participantes ativos' });
@@ -95,7 +104,7 @@ app.post('/api/admin/shuffle', async (req, res) => {
 // CRUD Individual de Participantes (Admin)
 app.post('/api/admin/participant', async (req, res) => {
     const { password, name } = req.body;
-    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'Senha incorreta' });
     
     const existing = await Participant.findOne({ name });
     if (existing) return res.status(400).json({ error: 'Nome já existe' });
@@ -115,7 +124,7 @@ app.post('/api/admin/participant', async (req, res) => {
 
 app.put('/api/admin/participant/:id', async (req, res) => {
     const { password, name, isActive } = req.body;
-    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'Senha incorreta' });
     
     const participant = await Participant.findById(req.params.id);
     if (!participant) return res.status(404).json({ error: 'Participante não encontrado' });
@@ -140,7 +149,7 @@ app.put('/api/admin/participant/:id', async (req, res) => {
 
 app.delete('/api/admin/participant/:id', async (req, res) => {
     const { password } = req.body;
-    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'Senha incorreta' });
     
     await Participant.findByIdAndDelete(req.params.id);
     res.json({ success: true });
@@ -177,7 +186,7 @@ app.post('/api/change-password', async (req, res) => {
 
 app.post('/api/admin/participants', async (req, res) => {
     const { password } = req.body;
-    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'Senha incorreta' });
     
     const participants = await Participant.find({}, '_id name password passwordChanged isActive hasSeen');
     res.json(participants);
@@ -185,7 +194,7 @@ app.post('/api/admin/participants', async (req, res) => {
 
 app.post('/api/admin/change-password', async (req, res) => {
     const { password, name, newPassword } = req.body;
-    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'Senha incorreta' });
     
     const participant = await Participant.findOne({ name });
     if (!participant) return res.status(404).json({ error: 'Nome não encontrado' });
@@ -229,7 +238,7 @@ app.delete('/api/presentes/:id', async (req, res) => {
 // Deletar em massa (admin)
 app.post('/api/admin/presentes/delete', async (req, res) => {
     const { password, ids, all } = req.body;
-    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'Senha incorreta' });
     
     if (all) {
         await Presente.deleteMany({});
@@ -304,7 +313,7 @@ app.delete('/api/ceia/:id', async (req, res) => {
 // Deletar em massa (admin)
 app.post('/api/admin/ceia/delete', async (req, res) => {
     const { password, ids, all } = req.body;
-    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'Senha incorreta' });
     
     if (all) {
         await Prato.deleteMany({});
@@ -315,4 +324,5 @@ app.post('/api/admin/ceia/delete', async (req, res) => {
 });
 
 // Iniciar o servidor
-app.listen(3000, () => console.log('Servidor rodando na porta 3000!'));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}!`));
