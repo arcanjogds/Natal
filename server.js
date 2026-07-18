@@ -24,6 +24,7 @@ const Participant = mongoose.model('Participant', new mongoose.Schema({
 const Presente = mongoose.model('Presente', new mongoose.Schema({
     nomeFamiliar: String,
     item: String,
+    valor: String,
     tamanhoEspecificacao: String,
     linkLoja: String
 }));
@@ -159,8 +160,8 @@ app.get('/api/presentes', async (req, res) => {
 
 // Adicionar um novo presente à lista
 app.post('/api/presentes', async (req, res) => {
-    const { nomeFamiliar, item, tamanhoEspecificacao, linkLoja } = req.body;
-    const novoPresente = new Presente({ nomeFamiliar, item, tamanhoEspecificacao, linkLoja });
+    const { nomeFamiliar, item, valor, tamanhoEspecificacao, linkLoja } = req.body;
+    const novoPresente = new Presente({ nomeFamiliar, item, valor, tamanhoEspecificacao, linkLoja });
     await novoPresente.save();
     res.json(novoPresente);
 });
@@ -186,10 +187,10 @@ app.post('/api/admin/presentes/delete', async (req, res) => {
 
 // Editar um presente
 app.put('/api/presentes/:id', async (req, res) => {
-    const { item, tamanhoEspecificacao, linkLoja } = req.body;
+    const { item, valor, tamanhoEspecificacao, linkLoja } = req.body;
     const presenteAtualizado = await Presente.findByIdAndUpdate(
         req.params.id,
-        { item, tamanhoEspecificacao, linkLoja },
+        { item, valor, tamanhoEspecificacao, linkLoja },
         { new: true }
     );
     res.json(presenteAtualizado);
