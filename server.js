@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 app.use(helmet());
@@ -13,6 +14,16 @@ app.use(cors({
     methods: ['GET', 'POST', 'PUT', 'DELETE']
 }));
 app.use(express.json({ limit: '10kb' }));
+
+// 4. Rate Limiting para as rotas de Admin
+const adminLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 10, // Limite de 10 requisições...
+    skipSuccessfulRequests: true, // ...Apenas conta requisições falhas (ex: senha errada - status 401)
+    message: { error: 'Muitas tentativas incorretas. O seu IP foi bloqueado temporariamente por 15 minutos.' }
+});
+
+app.use('/api/admin/', adminLimiter);
 
 // Conexão Segura com o MongoDB
 mongoose.connect(process.env.MONGODB_URI)
