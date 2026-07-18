@@ -75,17 +75,20 @@ app.post('/api/admin/shuffle', async (req, res) => {
         }
     }
 
+    const existingParticipants = await Participant.find({});
+    
     await Participant.deleteMany({});
 
     const newParticipants = names.map((name, index) => {
-        // Gera senha numérica de 4 dígitos (1000 a 9999)
+        const existing = existingParticipants.find(p => p.name === name);
+        // Gera senha se for usuário novo
         const gerada = Math.floor(1000 + Math.random() * 9000).toString();
         return {
             name: name,
             drawnName: shuffled[index],
             hasSeen: false,
-            password: gerada,
-            passwordChanged: false
+            password: existing ? existing.password : gerada,
+            passwordChanged: existing ? existing.passwordChanged : false
         };
     });
 
@@ -129,6 +132,19 @@ app.post('/api/admin/participants', async (req, res) => {
     
     const participants = await Participant.find({}, 'name password passwordChanged');
     res.json(participants);
+});
+
+app.post('/api/admin/change-password', async (req, res) => {
+    const { password, name, newPassword } = req.body;
+    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    
+    const participant = await Participant.findOne({ name });
+    if (!participant) return res.status(404).json({ error: 'Nome não encontrado' });
+    
+    participant.password = newPassword;
+    await participant.save();
+    
+    res.json({ success: true });
 });
 
 // ==========================================
