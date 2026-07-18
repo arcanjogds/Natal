@@ -59,11 +59,13 @@ app.post('/api/reveal', async (req, res) => {
 });
 
 app.post('/api/admin/shuffle', async (req, res) => {
-    const { password, names } = req.body;
-
+    const { password } = req.body;
     if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
-    if (!names || names.length < 3) return res.status(400).json({ error: 'Mínimo de 3 nomes' });
 
+    const activeParticipants = await Participant.find({ isActive: true });
+    if (activeParticipants.length < 3) return res.status(400).json({ error: 'Mínimo de 3 participantes ativos' });
+
+    const names = activeParticipants.map(p => p.name);
     let shuffled = [...names].sort(() => Math.random() - 0.5);
     let valid = false;
     while (!valid) {
@@ -77,41 +79,66 @@ app.post('/api/admin/shuffle', async (req, res) => {
         }
     }
 
-    const existingParticipants = await Participant.find({});
+    for (let i = 0; i < activeParticipants.length; i++) {
+        activeParticipants[i].drawnName = shuffled[i];
+        activeParticipants[i].hasSeen = false;
+        await activeParticipants[i].save();
+    }
+
+    res.json({ success: true });
+});
+
+// CRUD Individual de Participantes (Admin)
+app.post('/api/admin/participant', async (req, res) => {
+    const { password, name } = req.body;
+    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
     
-    // Marcar como inativo os que não estão na nova lista
-    for (const existing of existingParticipants) {
-        if (!names.includes(existing.name)) {
-            existing.isActive = false;
-            existing.drawnName = '';
-            existing.hasSeen = false;
-            await existing.save();
+    const existing = await Participant.findOne({ name });
+    if (existing) return res.status(400).json({ error: 'Nome já existe' });
+    
+    const gerada = Math.floor(1000 + Math.random() * 9000).toString();
+    const newParticipant = new Participant({
+        name,
+        drawnName: '',
+        hasSeen: false,
+        password: gerada,
+        passwordChanged: false,
+        isActive: true
+    });
+    await newParticipant.save();
+    res.json({ success: true, participant: newParticipant });
+});
+
+app.put('/api/admin/participant/:id', async (req, res) => {
+    const { password, name, isActive } = req.body;
+    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    
+    const participant = await Participant.findById(req.params.id);
+    if (!participant) return res.status(404).json({ error: 'Participante não encontrado' });
+    
+    if (name && name !== participant.name) {
+        const existing = await Participant.findOne({ name });
+        if (existing) return res.status(400).json({ error: 'Já existe um participante com este nome' });
+        participant.name = name;
+    }
+    
+    if (isActive !== undefined) {
+        participant.isActive = isActive;
+        if (!isActive) {
+            participant.drawnName = '';
+            participant.hasSeen = false;
         }
     }
+    
+    await participant.save();
+    res.json({ success: true, participant });
+});
 
-    // Adicionar ou atualizar os participantes da nova lista
-    for (let i = 0; i < names.length; i++) {
-        const name = names[i];
-        const existing = existingParticipants.find(p => p.name === name);
-        
-        if (existing) {
-            existing.isActive = true;
-            existing.drawnName = shuffled[i];
-            existing.hasSeen = false;
-            await existing.save();
-        } else {
-            const gerada = Math.floor(1000 + Math.random() * 9000).toString();
-            await new Participant({
-                name: name,
-                drawnName: shuffled[i],
-                hasSeen: false,
-                password: gerada,
-                passwordChanged: false,
-                isActive: true
-            }).save();
-        }
-    }
-
+app.delete('/api/admin/participant/:id', async (req, res) => {
+    const { password } = req.body;
+    if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
+    
+    await Participant.findByIdAndDelete(req.params.id);
     res.json({ success: true });
 });
 
@@ -148,7 +175,7 @@ app.post('/api/admin/participants', async (req, res) => {
     const { password } = req.body;
     if (password !== 'admin123') return res.status(401).json({ error: 'Senha incorreta' });
     
-    const participants = await Participant.find({}, 'name password passwordChanged isActive');
+    const participants = await Participant.find({}, '_id name password passwordChanged isActive');
     res.json(participants);
 });
 
