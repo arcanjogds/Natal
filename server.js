@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const mongoSanitize = require('express-mongo-sanitize');
 
 const app = express();
 app.use(helmet());
@@ -15,7 +14,6 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
-app.use(mongoSanitize());
 
 // 4. Rate Limiting para as rotas de Admin
 const adminLimiter = rateLimit({
