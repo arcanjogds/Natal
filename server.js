@@ -3,12 +3,12 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
-const mongoSanitize = require('express-mongo-sanitize');
+
 const rateLimit = require('express-rate-limit');
 
 const app = express();
 app.use(helmet());
-app.use(mongoSanitize());
+
 app.use(cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'DELETE']
