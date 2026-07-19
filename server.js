@@ -6,7 +6,9 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
-app.use(helmet());
+app.use(helmet({
+    crossOriginResourcePolicy: false,
+}));
 
 app.use(cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
