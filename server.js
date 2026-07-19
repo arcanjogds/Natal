@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
+const mongoSanitize = require('express-mongo-sanitize');
 
 const app = express();
 app.use(helmet({
@@ -17,11 +19,39 @@ app.use(cors({
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
-// 4. Rate Limiting para as rotas de Admin
+const JWT_SECRET = process.env.JWT_SECRET || 'chave-secreta-natal-2026';
+
+// Middleware para Sanitize de NoSQL (ignorando req.query)
+app.use((req, res, next) => {
+    if (req.body) req.body = mongoSanitize.sanitize(req.body);
+    if (req.params) req.params = mongoSanitize.sanitize(req.params);
+    next();
+});
+
+// Middleware JWT
+const verificarToken = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Acesso negado: Token ausente' });
+    const token = authHeader.split(' ')[1];
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) return res.status(403).json({ error: 'Token inválido ou expirado' });
+        req.user = decoded; // { name }
+        next();
+    });
+};
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    skipSuccessfulRequests: true,
+    message: { error: 'Muitas tentativas falhas. Tente novamente em 15 minutos.' }
+});
+
+// Rate Limiting para as rotas de Admin
 const adminLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 10, // Limite de 10 requisições...
-    skipSuccessfulRequests: true, // ...Apenas conta requisições falhas (ex: senha errada - status 401)
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    skipSuccessfulRequests: true,
     message: { error: 'Muitas tentativas incorretas. O seu IP foi bloqueado temporariamente por 15 minutos.' }
 });
 
@@ -31,6 +61,7 @@ app.use('/api/admin/', adminLimiter);
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log('Conectado ao MongoDB com segurança!'))
     .catch((err) => console.error('Erro na conexão com o banco:', err.message));
+
 // ==========================================
 // SCHEMAS (Modelos de Dados)
 // ==========================================
@@ -72,8 +103,8 @@ app.get('/api/participants', async (req, res) => {
     res.json(participants);
 });
 
-app.post('/api/reveal', async (req, res) => {
-    const { name } = req.body;
+app.post('/api/reveal', verificarToken, async (req, res) => {
+    const name = req.user.name; // Pega o nome do Token verificado, blindando contra injeção de nome
     const participant = await Participant.findOne({ name });
 
     if (!participant) return res.status(404).json({ error: 'Nome não encontrado' });
@@ -172,25 +203,28 @@ app.delete('/api/admin/participant/:id', async (req, res) => {
 // ROTAS DE LOGIN E ADMIN
 // ==========================================
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', loginLimiter, async (req, res) => {
     const { name, password } = req.body;
-    const participant = await Participant.findOne({ name });
+    // Cast manual para String também ajuda a proteger contra NoSQL Injection, junto com o mongoSanitize
+    const participant = await Participant.findOne({ name: String(name) });
     
     if (!participant) return res.status(404).json({ error: 'Nome não encontrado' });
-    if (participant.password !== password) return res.status(401).json({ error: 'Senha incorreta' });
+    if (participant.password !== String(password)) return res.status(401).json({ error: 'Senha incorreta' });
     
-    res.json({ success: true, participant });
+    const token = jwt.sign({ name: participant.name }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ success: true, participant, token });
 });
 
-app.post('/api/change-password', async (req, res) => {
-    const { name, oldPassword, newPassword } = req.body;
+app.post('/api/change-password', loginLimiter, verificarToken, async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+    const name = req.user.name;
     const participant = await Participant.findOne({ name });
     
     if (!participant) return res.status(404).json({ error: 'Nome não encontrado' });
-    if (participant.password !== oldPassword) return res.status(401).json({ error: 'Senha atual incorreta' });
-    if (!newPassword || newPassword.length < 4) return res.status(400).json({ error: 'A nova senha deve ter no mínimo 4 caracteres' });
+    if (participant.password !== String(oldPassword)) return res.status(401).json({ error: 'Senha atual incorreta' });
+    if (!newPassword || String(newPassword).length < 4) return res.status(400).json({ error: 'A nova senha deve ter no mínimo 4 caracteres' });
     
-    participant.password = newPassword;
+    participant.password = String(newPassword);
     participant.passwordChanged = true;
     await participant.save();
     
@@ -209,10 +243,10 @@ app.post('/api/admin/change-password', async (req, res) => {
     const { password, name, newPassword } = req.body;
     if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'Senha incorreta' });
     
-    const participant = await Participant.findOne({ name });
+    const participant = await Participant.findOne({ name: String(name) });
     if (!participant) return res.status(404).json({ error: 'Nome não encontrado' });
     
-    participant.password = newPassword;
+    participant.password = String(newPassword);
     await participant.save();
     
     res.json({ success: true });
@@ -229,7 +263,7 @@ app.get('/api/presentes', async (req, res) => {
 });
 
 // Adicionar um novo presente à lista (ou Kit vazio)
-app.post('/api/presentes', async (req, res) => {
+app.post('/api/presentes', verificarToken, async (req, res) => {
     const { nomeFamiliar, nomeKit, itens, meta, isKit } = req.body;
     const novoPresente = new Presente({ 
         nomeFamiliar, 
@@ -243,7 +277,7 @@ app.post('/api/presentes', async (req, res) => {
 });
 
 // Deletar um presente (caso a pessoa desista do item)
-app.delete('/api/presentes/:id', async (req, res) => {
+app.delete('/api/presentes/:id', verificarToken, async (req, res) => {
     await Presente.findByIdAndDelete(req.params.id);
     res.json({ success: true });
 });
@@ -262,7 +296,7 @@ app.post('/api/admin/presentes/delete', async (req, res) => {
 });
 
 // Editar um presente/kit
-app.put('/api/presentes/:id', async (req, res) => {
+app.put('/api/presentes/:id', verificarToken, async (req, res) => {
     const { nomeKit, itens, meta } = req.body;
     const updateData = {};
     if (nomeKit !== undefined) updateData.nomeKit = nomeKit;
@@ -288,7 +322,7 @@ app.get('/api/ceia', async (req, res) => {
 });
 
 // Adicionar um novo prato ao cardápio
-app.post('/api/ceia', async (req, res) => {
+app.post('/api/ceia', verificarToken, async (req, res) => {
     const { nomePrato, categoria } = req.body;
     const novoPrato = new Prato({ nomePrato, categoria }); // Responsável começa vazio por padrão
     await novoPrato.save();
@@ -296,7 +330,7 @@ app.post('/api/ceia', async (req, res) => {
 });
 
 // Assumir a responsabilidade por um prato ou Desistir
-app.put('/api/ceia/:id/assumir', async (req, res) => {
+app.put('/api/ceia/:id/assumir', verificarToken, async (req, res) => {
     const { responsaveis } = req.body; // array completo
     const prato = await Prato.findByIdAndUpdate(
         req.params.id,
@@ -307,7 +341,7 @@ app.put('/api/ceia/:id/assumir', async (req, res) => {
 });
 
 // Editar um prato do cardápio
-app.put('/api/ceia/:id', async (req, res) => {
+app.put('/api/ceia/:id', verificarToken, async (req, res) => {
     const { nomePrato, categoria } = req.body;
     const pratoAtualizado = await Prato.findByIdAndUpdate(
         req.params.id,
@@ -318,7 +352,7 @@ app.put('/api/ceia/:id', async (req, res) => {
 });
 
 // Deletar um prato do cardápio
-app.delete('/api/ceia/:id', async (req, res) => {
+app.delete('/api/ceia/:id', verificarToken, async (req, res) => {
     await Prato.findByIdAndDelete(req.params.id);
     res.json({ success: true });
 });
