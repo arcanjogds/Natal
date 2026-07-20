@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 const mongoSanitize = require('express-mongo-sanitize');
 
 const app = express();
+app.set('trust proxy', 1); // Confia no primeiro proxy (Render/Heroku/etc)
 app.use(helmet({
     crossOriginResourcePolicy: false,
 }));
